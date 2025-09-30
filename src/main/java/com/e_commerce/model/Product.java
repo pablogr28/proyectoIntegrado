@@ -43,7 +43,7 @@ public class Product {
 	@NotNull(message="El stock del producto debe ser obligatorio")
 	@Min(value=0,message="Los stock del producto debe ser como mínimo 0")
 	@Column(name="Stock")
-	private String stock;
+	private Integer stock;
 	
     @Column(name = "Available")
     private String available;
@@ -70,7 +70,7 @@ public class Product {
 	public Product(Long id, @NotBlank(message = "El nombre del producto el obligatorio") String name,
 			@NotBlank(message = "La descripción del producto el obligatorio") String description,
 			@Positive(message = "El precio del producto debe ser positivo") Double price,
-			@NotNull(message = "El stock del producto debe ser obligatorio") @Min(value = 0, message = "Los stock del producto debe ser como mínimo 0") String stock,
+			@NotNull(message = "El stock del producto debe ser obligatorio") @Min(value = 0, message = "Los stock del producto debe ser como mínimo 0") Integer stock,
 			String available, @NotNull(message = "La categoria del producto es obligatoria") Category category) {
 		super();
 		this.id = id;
@@ -118,11 +118,11 @@ public class Product {
 		this.price = price;
 	}
 
-	public String getStock() {
+	public Integer getStock() {
 		return stock;
 	}
 
-	public void setStock(String stock) {
+	public void setStock(Integer stock) {
 		this.stock = stock;
 	}
 
