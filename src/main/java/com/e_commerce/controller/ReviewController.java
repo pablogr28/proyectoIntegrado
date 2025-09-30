@@ -56,7 +56,7 @@ public class ReviewController {
 
     @PostMapping("/user/{userId}")
     public ResponseEntity<?> createReview(@PathVariable Long userId, @RequestBody @Valid ReviewDTO reviewDto) {
-        User user = userService.getUserById(userId);
+        User user = userService.getUserById(userId).orElseThrow();
         if (user == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
                 Map.of("message", "El usuario con ID " + userId + " no existe.")
