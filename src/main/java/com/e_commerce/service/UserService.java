@@ -107,8 +107,13 @@ public class UserService implements UserDetailsService {
     // Convertir User a UserDTO
     private UserDTO entityToDto(User user) {
         UserDTO dto = new UserDTO();
+        dto.setEmail(user.getEmail());
+        dto.setName(user.getName());
         dto.setUsername(user.getUsername());
         dto.setPassword(user.getPassword());
+        dto.setGender(user.getGender());
+        dto.setAddress(user.getAddress());
+        dto.setRegistrationDate(user.getRegistrationDate());
         return dto;
     }
 

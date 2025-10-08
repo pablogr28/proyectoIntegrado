@@ -70,13 +70,17 @@ public class UserController {
                             credential.getUsername(), credential.getPassword()));
 
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+           
 
             String role = userDetails.getAuthorities().stream()
                     .findFirst()
                     .map(auth -> auth.getAuthority())
                     .orElse("ROLE_USER");
+            
+            User user = userService.getUserByUsername(userDetails.getUsername())
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-            String token = TokenUtils.generateToken(userDetails.getUsername(), role);
+            String token = TokenUtils.generateToken(user);
 
             return ResponseEntity.ok(Map.of("token", token));
 

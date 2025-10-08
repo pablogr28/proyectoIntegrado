@@ -1,5 +1,7 @@
 package com.e_commerce.model;
 
+import java.time.LocalDate;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -20,13 +22,14 @@ public class UserDTO {
 
 	    private String gender;
 	    private String address;
+	    private LocalDate registrationDate;
 	    
 	    
 
 	    public UserDTO(@NotBlank(message = "El correo es obligatorio") @Email String email,
 				@NotBlank(message = "El nombre es obligatorio") String name,
 				@NotBlank(message = "El usuario es obligatorio") String username,
-				@NotBlank(message = "La contraseña es obligatoria") String password, String gender, String address) {
+				@NotBlank(message = "La contraseña es obligatoria") String password, String gender, String address,String role,String status,LocalDate registrationDate) {
 			super();
 			this.email = email;
 			this.name = name;
@@ -60,4 +63,15 @@ public class UserDTO {
 
 	    public String getAddress() { return address; }
 	    public void setAddress(String address) { this.address = address; }
+
+
+
+		public LocalDate getRegistrationDate() {
+			return registrationDate;
+		}
+
+
+		public void setRegistrationDate(LocalDate registrationDate) {
+			this.registrationDate = registrationDate;
+		}
 }

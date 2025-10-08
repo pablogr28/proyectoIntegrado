@@ -9,6 +9,8 @@ import java.util.Map;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import com.e_commerce.model.User;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.MalformedJwtException;
@@ -22,24 +24,29 @@ public class TokenUtils {
 	// SOLO RECOMENDABLE EN UN PRINCIPIO MIENTRAS DESARROLLAMOS
 	private final static Long ACCESS_TOKEN_LIFE_TIME = (long) (60*4*1000);
 	
-	public static String generateToken(String username, String role) {
-        Date expirationDate = new Date(System.currentTimeMillis() + ACCESS_TOKEN_LIFE_TIME);
-        Map<String, Object> payload = new HashMap<>();
+	public static String generateToken(User user) {
+	    Date expirationDate = new Date(System.currentTimeMillis() + ACCESS_TOKEN_LIFE_TIME);
+	    Map<String, Object> payload = new HashMap<>();
 
-        // Añadimos el prefijo ROLE_ al rol
-        String roleWithPrefix = role.startsWith("ROLE_") ? role : "ROLE_" + role;
-        payload.put("role", roleWithPrefix);
+	    payload.put("id", user.getId());
+	    payload.put("username", user.getUsername());
+	    payload.put("name", user.getName());
+	    payload.put("email", user.getEmail());
+	    payload.put("gender", user.getGender());
+	    payload.put("address", user.getAddress());
+	    payload.put("status", user.getStatus());
+	    payload.put("role", user.getRole());
+	    payload.put("registrationDate", user.getRegistrationDate().toString());
 
-        payload.put("username", username);
+	    String token = Jwts.builder()
+	            .subject(user.getUsername())
+	            .issuedAt(expirationDate)
+	            .claims(payload)
+	            .signWith(Keys.hmacShaKeyFor(ACCESS_TOKEN_SECRET.getBytes()))
+	            .compact();
+	    return "Bearer " + token;
+	}
 
-        String token = Jwts.builder()
-                .subject(username)
-                .issuedAt(expirationDate)
-                .claims(payload)
-                .signWith(Keys.hmacShaKeyFor(ACCESS_TOKEN_SECRET.getBytes()))
-                .compact();
-        return "Bearer " + token;
-    }
 	
 //	public static UsernamePasswordAuthenticationToken decodeToken(String token) {
 //		if (token.startsWith("Bearer ")) {
