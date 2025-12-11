@@ -12,10 +12,13 @@ import com.e_commerce.repository.ProductRepository;
 public class ProductService {
     
     private final ProductRepository productRepository;
-    
+    private final NotificationService notificationService;
+
     @Autowired
-    public ProductService(ProductRepository productRepository) {
+    public ProductService(ProductRepository productRepository,
+                          NotificationService notificationService) {
         this.productRepository = productRepository;
+        this.notificationService = notificationService;
     }
     
     public List<Product> getAllProducts() {
@@ -27,10 +30,29 @@ public class ProductService {
     }
 
     public Product saveProduct(Product product) {
-        return productRepository.save(product);
+        boolean wasOutOfStock = false;
+        if (product.getId() != null) {
+            Product existing = productRepository.findById(product.getId()).orElse(null);
+            if (existing != null) {
+                wasOutOfStock = existing.getStock() <= 0;
+            }
+        }
+
+        Product saved = productRepository.save(product);
+
+        if (wasOutOfStock && saved.getStock() > 0) {
+            notificationService.notifyUsers(saved);
+        }
+
+        return saved;
     }
 
     public void deleteProduct(Long id) {
         productRepository.deleteById(id);
     }
+    
+    public List<Product> findByNameContainingIgnoreCase(String name) {
+        return productRepository.findByNameContainingIgnoreCase(name);
+    }
+
 }

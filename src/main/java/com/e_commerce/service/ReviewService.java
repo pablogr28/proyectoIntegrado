@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.e_commerce.model.Product;
 import com.e_commerce.model.Review;
 import com.e_commerce.repository.ReviewRepository;
 
@@ -33,4 +34,9 @@ public class ReviewService {
     public void deleteReview(Long id) {
         reviewRepository.deleteById(id);
     }
+    
+    public List<Review> getReviewsByProduct(Product product) {
+        return reviewRepository.findByProduct(product);
+    }
+
 }

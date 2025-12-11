@@ -23,6 +23,8 @@ public class UserDTO {
 	    private String gender;
 	    private String address;
 	    private LocalDate registrationDate;
+	    private String status;
+	    private String role;
 	    
 	    
 
@@ -37,6 +39,8 @@ public class UserDTO {
 			this.password = password;
 			this.gender = gender;
 			this.address = address;
+			this.status= status;
+			this.role= role;
 		}
 	    
 	    
@@ -73,5 +77,25 @@ public class UserDTO {
 
 		public void setRegistrationDate(LocalDate registrationDate) {
 			this.registrationDate = registrationDate;
+		}
+
+
+		public String getStatus() {
+			return status;
+		}
+
+
+		public void setStatus(String status) {
+			this.status = status;
+		}
+
+
+		public String getRole() {
+			return role;
+		}
+
+
+		public void setRole(String role) {
+			this.role = role;
 		}
 }

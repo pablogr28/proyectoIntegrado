@@ -3,20 +3,23 @@ package com.e_commerce.controller;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.e_commerce.model.Category;
 import com.e_commerce.model.Product;
 import com.e_commerce.model.ProductDTO;
 import com.e_commerce.service.CategoryService;
+import com.e_commerce.service.CloudinaryService;
 import com.e_commerce.service.ProductService;
 
-import jakarta.validation.Valid;
+import io.jsonwebtoken.io.IOException;
 
 @RestController
 @RequestMapping("/products")
@@ -28,85 +31,164 @@ public class ProductController {
     @Autowired
     private CategoryService categoryService;
 
+    @Autowired
+    private CloudinaryService cloudinaryService;
+
+    // GET ALL
     @GetMapping
-    public List<ProductDTO> getAllProducts() {
-        return productService.getAllProducts().stream()
-                .map(this::convertToDTO)
-                .collect(Collectors.toList());
+    public List<Product> getAllProducts() {
+        return productService.getAllProducts();
     }
 
+    // GET BY ID
     @GetMapping("/{id}")
     public ResponseEntity<?> getProductById(@PathVariable Long id) {
         Product product = productService.getProductById(id);
         if (product == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    Map.of(
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
                             "timestamp", LocalDateTime.now(),
                             "status", 404,
                             "error", "Not Found",
                             "message", "Producto con ID " + id + " no encontrado."
-                    )
-            );
+                    ));
         }
-        return ResponseEntity.ok(convertToDTO(product));
+        return ResponseEntity.ok(product);
     }
 
-    @PostMapping
-    public ResponseEntity<?> createProduct(@RequestBody @Valid ProductDTO productDTO) {
+    // CREATE PRODUCT
+    @PostMapping("/add")
+    public ResponseEntity<?> createProduct(
+            @RequestPart("productDTO") ProductDTO productDTO,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) throws IOException, java.io.IOException {
+
         Category category = categoryService.getCategoryById(productDTO.getCategoryId());
         if (category == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                    Map.of(
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
                             "timestamp", LocalDateTime.now(),
                             "status", 400,
                             "error", "Bad Request",
                             "message", "Categoría con ID " + productDTO.getCategoryId() + " no encontrada."
-                    )
-            );
+                    ));
         }
 
-        Product product = convertToEntity(productDTO, category);
+        String imageUrl = null;
+        if (file != null && !file.isEmpty()) {
+            if (file.getContentType() == null || !file.getContentType().startsWith("image/")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Solo se permiten imágenes"));
+            }
+            if (file.getSize() > 5 * 1024 * 1024) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Imagen demasiado grande (max 5MB)"));
+            }
+
+            Map uploadResult = cloudinaryService.upload(file);
+            imageUrl = uploadResult.get("secure_url").toString();
+        }
+
+        Product product = new Product();
+        product.setName(productDTO.getName());
+        product.setDescription(productDTO.getDescription());
+        product.setPrice(productDTO.getPrice());
+        product.setStock(productDTO.getStock());
+
+        // --- BOOLEAN AVAILABLE ---
+        product.setAvailable(productDTO.getAvailable() != null ? productDTO.getAvailable() : true);
+
+        product.setCategory(category);
+        product.setImage(imageUrl);
+
         Product saved = productService.saveProduct(product);
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertToDTO(saved));
+
+        ProductDTO resultDTO = new ProductDTO(
+                saved.getName(),
+                saved.getDescription(),
+                saved.getPrice(),
+                saved.getStock(),
+                saved.getAvailable(),
+                category.getId()
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(resultDTO);
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updateProduct(@PathVariable Long id, @RequestBody @Valid ProductDTO productDTO) {
+ // UPDATE PRODUCT
+    @PutMapping(value = "/update/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> updateProduct(
+            @PathVariable Long id,
+            @RequestPart("productDTO") ProductDTO productDTO,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) throws IOException {
+
         Product existing = productService.getProductById(id);
         if (existing == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Producto con ID " + id + " no encontrado"));
+        }
+
+        Category category = categoryService.getCategoryById(productDTO.getCategoryId());
+        if (category == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", "Categoría con ID " + productDTO.getCategoryId() + " no encontrada."));
+        }
+
+        // Manejo de imagen
+        if (file != null && !file.isEmpty()) {
+            if (file.getContentType() == null || !file.getContentType().startsWith("image/")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Solo se permiten imágenes"));
+            }
+            if (file.getSize() > 5 * 1024 * 1024) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("message", "Imagen demasiado grande (max 5MB)"));
+            }
+
+            if (existing.getImagePublicId() != null) {
+                cloudinaryService.destroy(existing.getImagePublicId());
+            }
+
+            Map upload = cloudinaryService.upload(file);
+            existing.setImage(upload.get("secure_url").toString());
+            existing.setImagePublicId(upload.get("public_id").toString());
+        }
+
+        // Actualización de campos
+        existing.setName(productDTO.getName());
+        existing.setDescription(productDTO.getDescription());
+        existing.setPrice(productDTO.getPrice());
+        existing.setStock(productDTO.getStock());
+        existing.setAvailable(productDTO.getAvailable()); // ⚡ Boolean directo
+        existing.setCategory(category);
+
+        Product updated = productService.saveProduct(existing);
+
+        return ResponseEntity.ok(updated);
+    }
+
+    // SEARCH BY NAME
+    @GetMapping("/search")
+    public ResponseEntity<?> getProductsByName(@RequestParam("name") String name) {
+        List<Product> results = productService.findByNameContainingIgnoreCase(name);
+
+        if (results.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                     Map.of(
                             "timestamp", LocalDateTime.now(),
                             "status", 404,
                             "error", "Not Found",
-                            "message", "No se encontró el producto con ID " + id
+                            "message", "No se encontraron productos con el nombre: " + name
                     )
             );
         }
 
-        Category category = categoryService.getCategoryById(productDTO.getCategoryId());
-        if (category == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                    Map.of(
-                            "timestamp", LocalDateTime.now(),
-                            "status", 400,
-                            "error", "Bad Request",
-                            "message", "Categoría con ID " + productDTO.getCategoryId() + " no encontrada."
-                    )
-            );
-        }
-
-        existing.setName(productDTO.getName());
-        existing.setDescription(productDTO.getDescription());
-        existing.setPrice(productDTO.getPrice());
-        existing.setStock(productDTO.getStock());
-        existing.setAvailable(productDTO.getAvailable() ? "Yes" : "No");
-        existing.setCategory(category);
-
-        Product updated = productService.saveProduct(existing);
-        return ResponseEntity.ok(convertToDTO(updated));
+        return ResponseEntity.ok(results);
     }
 
+    // DELETE → Soft delete
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
         Product existing = productService.getProductById(id);
@@ -120,32 +202,33 @@ public class ProductController {
                     )
             );
         }
-        productService.deleteProduct(id);
-        return ResponseEntity.noContent().build();
+
+        existing.setAvailable(false); // BOOLEAN
+        productService.saveProduct(existing);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Producto marcado como no disponible",
+                "productId", existing.getId()
+        ));
     }
 
-    // --- Métodos auxiliares para mapear entre Product y ProductDTO ---
-    private ProductDTO convertToDTO(Product product) {
-        return new ProductDTO(
-                product.getName(),
-                product.getDescription(),
-                product.getPrice(),
-                product.getStock(),
-                "Yes".equalsIgnoreCase(product.getAvailable()),
-                product.getCategory() != null ? product.getCategory().getId() : null,
-                null // Puedes incluir imageUrl si lo agregas al Product
-        );
-    }
+    // PATCH deactivate
+    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/{id}/deactivate")
+    public ResponseEntity<?> deactivateProduct(@PathVariable Long id) {
 
-    private Product convertToEntity(ProductDTO dto, Category category) {
-        Product product = new Product();
-        product.setName(dto.getName());
-        product.setDescription(dto.getDescription());
-        product.setPrice(dto.getPrice());
-        product.setStock(dto.getStock()
-        		);
-        product.setAvailable(dto.getAvailable() ? "Yes" : "No");
-        product.setCategory(category);
-        return product;
+        Product existing = productService.getProductById(id);
+        if (existing == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Producto con ID " + id + " no encontrado"));
+        }
+
+        existing.setAvailable(false); // BOOLEAN
+        productService.saveProduct(existing);
+
+        return ResponseEntity.ok(Map.of(
+                "id", existing.getId(),
+                "available", existing.getAvailable()
+        ));
     }
 }

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -30,11 +31,11 @@ public class Review {
     @JsonBackReference
     private User user;
 	
-	@NotNull(message="El producto es obligatorio")
-    @ManyToOne
-    @JoinColumn(name="ProductId")
-    @JsonBackReference
-    private Product product;
+	@ManyToOne
+	@JoinColumn(name="ProductId")
+	@JsonManagedReference(value = "product-reviews")
+	private Product product;
+
 	
 	@Min(value = 1, message = "La valoración mínima es 1")
 	@Min(value = 5, message = "La valoración máxima es 5")

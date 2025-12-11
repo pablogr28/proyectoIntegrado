@@ -4,6 +4,9 @@ import com.e_commerce.model.Credential;
 import com.e_commerce.model.ErrorResponse;
 import com.e_commerce.model.User;
 import com.e_commerce.model.UserDTO;
+import com.e_commerce.model.VerificationToken;
+import com.e_commerce.repository.UserRepository;
+import com.e_commerce.repository.VerificationTokenRepository;
 import com.e_commerce.security.TokenUtils;
 import com.e_commerce.service.UserService;
 
@@ -23,7 +26,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.view.RedirectView;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController
@@ -39,64 +44,115 @@ public class UserController {
 
     @Autowired
     private AuthenticationManager authenticationManager;
+    
+    @Autowired
+    private VerificationTokenRepository tokenRepository;
 
-    // ---------- Registro ----------
-    @Operation(summary = "Registrar usuario", description = "Crea un nuevo usuario en el sistema")
-    @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Usuario registrado exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos inválidos o usuario ya existente")
-    })
+    @Autowired
+    private UserRepository userRepository;
+    
+    
+
+ // ---------------- REGISTRO ----------------
     @PostMapping("/registrar")
     public ResponseEntity<?> registerUser(@RequestBody UserDTO regDto) {
+        Map<String, Object> response = new HashMap<>();
+
         try {
+            // Validación: nombre de usuario duplicado
+            if (userRepository.existsByUsername(regDto.getUsername())) {
+                response.put("success", false);
+                response.put("message", "Ya existe un usuario con ese nombre de usuario.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            // Validación: correo electrónico duplicado
+            if (userRepository.findByEmail(regDto.getEmail()) == null) {
+                response.put("message", "Ya existe un usuario registrado con ese correo electrónico.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+         // Validación de contraseña mínima con complejidad
+            String password = regDto.getPassword();
+            if (password == null || password.isEmpty()) {
+                response.put("success", false);
+                response.put("message", "La contraseña no puede estar vacía.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            String pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$";
+
+            if (!password.matches(pattern)) {
+                response.put("success", false);
+                response.put("message", "La contraseña debe tener al menos 8 caracteres, " +
+                        "incluyendo una letra minúscula, una mayúscula, un número y un carácter especial (@$!%*?&).");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+
+            // Guardar usuario
             UserDTO saved = userService.saveUser(regDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+
+            // Respuesta exitosa
+            response.put("success", true);
+            response.put("message", "Usuario registrado correctamente. Revisa tu correo para verificar tu cuenta.");
+            response.put("user", saved);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage(), 400));
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.put("success", false);
+            response.put("message", "Error al registrar el usuario. Intenta nuevamente.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
-    // ---------- Login ----------
-    @Operation(summary = "Login de usuario", description = "Autentica al usuario y devuelve un token JWT")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Login exitoso"),
-        @ApiResponse(responseCode = "401", description = "Credenciales inválidas")
-    })
+
+    // ---------------- LOGIN ----------------
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> loginUser(@RequestBody Credential credential) {
+        Map<String, String> response = new HashMap<>();
+
         try {
+            // Verificar que exista el usuario
+            Optional<User> optionalUser = userService.getUserByUsername(credential.getUsername());
+            if (optionalUser.isEmpty()) {
+                response.put("error", "Usuario no encontrado.");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            User user = optionalUser.get();
+
+            // Verificar que el usuario esté activo/verificado
+            if (!user.isEnabled()) {
+                response.put("error", "Cuenta no verificada. Revisa tu correo para activarla.");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            // Autenticación (usuario y contraseña)
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             credential.getUsername(), credential.getPassword()));
 
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-           
-
-            String role = userDetails.getAuthorities().stream()
-                    .findFirst()
-                    .map(auth -> auth.getAuthority())
-                    .orElse("ROLE_USER");
-            
-            User user = userService.getUserByUsername(userDetails.getUsername())
-                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
+            // Generar token JWT
             String token = TokenUtils.generateToken(user);
-
-            return ResponseEntity.ok(Map.of("token", token));
+            response.put("token", token);
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Credenciales inválidas"));
+            // Contraseña incorrecta u otro error de autenticación
+            response.put("error", "Contraseña incorrecta");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
     }
 
-    // ---------- Actualizar (usuario autenticado) ----------
-    @Operation(summary = "Actualizar usuario", description = "Permite a un usuario autenticado modificar sus datos")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Usuario actualizado"),
-        @ApiResponse(responseCode = "403", description = "No puedes editar otro usuario"),
-        @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
-    })
+
+    // ---------------- ACTUALIZAR USUARIO ----------------
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody UserDTO regDto) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -120,13 +176,7 @@ public class UserController {
         }
     }
 
-    // ---------- Actualizar (admin) ----------
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Actualizar usuario (Admin)", description = "Permite a un administrador modificar datos de cualquier usuario")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Usuario actualizado"),
-        @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
-    })
     @PutMapping("/admin/{id}")
     public ResponseEntity<?> updateUserAdmin(@PathVariable Long id, @RequestBody UserDTO regDto) {
         try {
@@ -137,23 +187,26 @@ public class UserController {
         }
     }
 
-    // ---------- Obtener todos ----------
+    // ---------------- OBTENER / ELIMINAR ----------------
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Obtener todos los usuarios", description = "Devuelve la lista de usuarios (solo admin)")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Lista obtenida exitosamente")
-    })
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    public ResponseEntity<List<UserDTO>> getAllUsers() {
+        List<UserDTO> users = userService.getAllUsers().stream()
+            .map(user -> {
+                UserDTO dto = new UserDTO();
+                dto.setUsername(user.getUsername());
+                dto.setEmail(user.getEmail());
+                dto.setName(user.getName());
+                dto.setRole(user.getRole());
+                dto.setStatus(user.getStatus());
+                dto.setRegistrationDate(user.getRegistrationDate());
+                return dto;
+            })
+            .toList();
+        return ResponseEntity.ok(users);
     }
 
-    // ---------- Obtener por ID ----------
-    @Operation(summary = "Obtener usuario por ID", description = "Devuelve la información de un usuario específico")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Usuario encontrado"),
-        @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
-    })
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         Optional<User> optionalUser = userService.getUserById(id);
@@ -162,16 +215,103 @@ public class UserController {
                         .body(new ErrorResponse("Usuario con ID " + id + " no encontrado", 404)));
     }
 
-    // ---------- Eliminar ----------
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Eliminar usuario", description = "Permite a un administrador eliminar un usuario")
-    @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Usuario eliminado"),
-        @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
-    })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
     }
+
+ // ---------------- VERIFICAR CUENTA ----------------
+    @GetMapping("/verify")
+    public ResponseEntity<Map<String, Boolean>> verifyUser(@RequestParam("token") String token) {
+        Map<String, Boolean> response = new HashMap<>();
+
+        try {
+            Optional<VerificationToken> optionalToken = tokenRepository.findByToken(token);
+            if (optionalToken.isEmpty()) {
+                response.put("verified", false);
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            VerificationToken verificationToken = optionalToken.get();
+            User user = verificationToken.getUser();
+
+            if (user == null || verificationToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+                // Token expirado o inválido
+                tokenRepository.delete(verificationToken);
+                response.put("verified", false);
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Si el usuario aún no estaba activo, activarlo
+            if (!user.isEnabled()) {
+                user.setEnabled(true);
+                user.setStatus("active");
+                userRepository.save(user);
+            }
+
+            // Eliminar el token después de verificar
+            tokenRepository.delete(verificationToken);
+
+            response.put("verified", true);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.put("verified", false);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+
+    // ---------------- RECUPERAR CONTRASEÑA ----------------
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestParam("email") String email) {
+        try {
+            userService.createPasswordResetToken(email);
+            return ResponseEntity.ok(Map.of("message", "Correo de recuperación enviado"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse(e.getMessage(), 400));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestParam("token") String token, @RequestParam("password") String password) {
+        try {
+            userService.resetPassword(token, password);
+            return ResponseEntity.ok(Map.of("message", "Contraseña actualizada correctamente"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse(e.getMessage(), 400));
+        }
+    }
+    
+ // ---------------- CAMBIAR ROL ----------------
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/role")
+    public ResponseEntity<?> changeUserRole(@RequestParam String email,
+                                            @RequestParam boolean makeAdmin) {
+        try {
+            userService.changeUserRoleByEmail(email, makeAdmin);
+            return ResponseEntity.ok(Map.of("message", "Rol actualizado correctamente"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+    
+    // ---------------- CAMBIAR STATUS ----------------
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/status")
+    public ResponseEntity<?> changeUserStatus(@RequestParam String email,
+                                              @RequestParam boolean block) {
+        try {
+            userService.changeUserStatusByEmail(email, block);
+            return ResponseEntity.ok(Map.of("message", "Estado actualizado correctamente"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+
 }

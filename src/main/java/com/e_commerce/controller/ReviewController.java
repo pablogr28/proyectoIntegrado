@@ -14,6 +14,7 @@ import com.e_commerce.model.Product;
 import com.e_commerce.model.Review;
 import com.e_commerce.model.ReviewDTO;
 import com.e_commerce.model.User;
+import com.e_commerce.service.OrderService;
 import com.e_commerce.service.ProductService;
 import com.e_commerce.service.ReviewService;
 import com.e_commerce.service.UserService;
@@ -32,10 +33,16 @@ public class ReviewController {
 
     @Autowired
     private ProductService productService;
+    
+    @Autowired
+    private OrderService orderService;
 
     @GetMapping
-    public List<Review> getAllReviews() {
-        return reviewService.getAllReviews();
+    public List<ReviewDTO> getAllReviews() {
+        return reviewService.getAllReviews()
+                            .stream()
+                            .map(ReviewDTO::new)
+                            .toList();
     }
 
     @GetMapping("/{id}")
@@ -44,33 +51,38 @@ public class ReviewController {
         if (review == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                 Map.of(
-                    "timestamp", LocalDateTime.now(),
+                    "timestamp", java.time.LocalDateTime.now(),
                     "status", 404,
                     "error", "Not Found",
                     "message", "Review con ID " + id + " no encontrada."
                 )
             );
         }
-        return ResponseEntity.ok(review);
+        return ResponseEntity.ok(new ReviewDTO(review));
     }
+
 
     @PostMapping("/user/{userId}")
     public ResponseEntity<?> createReview(@PathVariable Long userId, @RequestBody @Valid ReviewDTO reviewDto) {
-        User user = userService.getUserById(userId).orElseThrow();
+        User user = userService.getUserById(userId).orElse(null);
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                Map.of("message", "El usuario con ID " + userId + " no existe.")
-            );
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", "El usuario con ID " + userId + " no existe."));
         }
 
         Product product = productService.getProductById(reviewDto.getProductId());
         if (product == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                Map.of("message", "El producto con ID " + reviewDto.getProductId() + " no existe.")
-            );
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", "El producto con ID " + reviewDto.getProductId() + " no existe."));
         }
 
-        // Construir review
+        // 🔒 Validar que el usuario haya comprado el producto
+        boolean hasPurchased = orderService.hasUserPurchasedProduct(userId, product.getId());
+        if (!hasPurchased) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("message", "No puedes dejar una review si no has comprado este producto."));
+        }
+
         Review review = new Review();
         review.setUser(user);
         review.setProduct(product);
@@ -78,15 +90,8 @@ public class ReviewController {
         review.setComment(reviewDto.getComment());
         review.setReviewDate(LocalDate.now());
 
-        // Validar duplicado (opcional según tu lógica de negocio)
-        if (reviewService.getReviewById(review.getId()) != null) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                Map.of("message", "El usuario ya ha realizado una review para este producto.")
-            );
-        }
-
         Review saved = reviewService.saveReview(review);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new ReviewDTO(saved));
     }
 
     @PutMapping("/{id}")
@@ -134,4 +139,27 @@ public class ReviewController {
         reviewService.deleteReview(id);
         return ResponseEntity.noContent().build();
     }
+    
+    @GetMapping("/product/{productId}")
+    public ResponseEntity<?> getReviewsByProduct(@PathVariable Long productId) {
+        Product product = productService.getProductById(productId);
+        if (product == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                Map.of(
+                    "timestamp", java.time.LocalDateTime.now(),
+                    "status", 404,
+                    "error", "Not Found",
+                    "message", "No se encontró el producto con ID " + productId
+                )
+            );
+        }
+
+        List<ReviewDTO> reviews = reviewService.getReviewsByProduct(product)
+                                                       .stream()
+                                                       .map(ReviewDTO::new)
+                                                       .toList();
+        return ResponseEntity.ok(reviews);
+    }
+
+
 }

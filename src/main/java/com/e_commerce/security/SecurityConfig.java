@@ -38,48 +38,79 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource())) // ✅ Habilitamos CORS
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
             .authorizeHttpRequests(auth -> auth
-                // Swagger abierto
-                .requestMatchers(
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    "/swagger-ui.html",
-                    "/swagger-resources/**",
-                    "/webjars/**"
-                ).permitAll()
+            	    // Swagger
+            	    .requestMatchers(
+            	        "/swagger-ui/**",
+            	        "/swagger-ui.html",
+            	        "/v3/api-docs/**",
+            	        "/swagger-resources/**",
+            	        "/webjars/**"
+            	    ).permitAll()
 
-                // Registro y login públicos
-                .requestMatchers("/users/registrar", "/users/login").permitAll()
+            	    // Login / Registro
+            	    .requestMatchers("/users/registrar", "/users/login", "/users/verify",
+            	                     "/users/forgot-password", "/users/reset-password").permitAll()
 
-                // GET públicos para todos
-                .requestMatchers(HttpMethod.GET, "/categories/**", "/products/**", "/reviews/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/users/registrar", "/users/login").permitAll()
+            	    // GET públicos
+            	    .requestMatchers(HttpMethod.GET, "/categories/**", "/products/**", "/reviews/**")
+            	    .permitAll()
 
-                // DELETE a /users/** solo para ADMIN
-                .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
+            	    // Carrito público sin token
+            	    .requestMatchers("/cart/user/**").permitAll()
 
-                // Cualquier otra petición requiere autenticación
-                .anyRequest().authenticated()
-            );
+            	    // Carrito con token
+            	    .requestMatchers("/cart/me/**", "/cart/add/**").authenticated()
 
+            	    // Solo administrador puede EDITAR o AÑADIR productos
+            	    .requestMatchers(HttpMethod.PUT, "/products/update/**").hasRole("ADMIN")
+            	    .requestMatchers(HttpMethod.POST, "/products/add").hasRole("ADMIN")
+            	    .requestMatchers(HttpMethod.GET, "/users/**").hasRole("ADMIN")
+            	    .requestMatchers(HttpMethod.PUT, "/users/role").hasRole("ADMIN")
+            	    .requestMatchers(HttpMethod.PUT, "/users/status").hasRole("ADMIN")
+            	    .requestMatchers(HttpMethod.PATCH, "/products/**").hasRole("ADMIN")
+
+            	    // Cupones público
+            	    .requestMatchers("/api/coupons/**").permitAll()
+            	    
+            	    //Realizar pagos debes estar autenticado
+            	    .requestMatchers("/api/payments/**").authenticated()
+            	    
+            	    .requestMatchers(HttpMethod.POST, "/reviews/user/**").authenticated()
+
+            	    
+            	    //Ver tus pedidos
+            	    .requestMatchers("/orders/**").authenticated()
+            	    
+            	    // Agregar después de las reglas existentes:
+            	    .requestMatchers("/notifications/**").authenticated()
+
+            	    // DELETE users solo ADMIN
+            	    .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
+
+            	    // Resto necesita token
+            	    .anyRequest().denyAll()
+            	);
+
+        // Filtro JWT
         http.addFilterBefore(requestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // ✅ Configuración CORS global
+    // Configuración CORS global
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200")); // frontend Angular
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true); // permite enviar cookies/autenticación
-        configuration.setExposedHeaders(List.of("Authorization")); // opcional, si devuelves tokens en headers
+        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(List.of("Authorization"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

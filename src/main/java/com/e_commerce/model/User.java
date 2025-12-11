@@ -53,9 +53,12 @@ public class User {
     @Column(name = "Status")
     private String status;
     
+    @Column(name = "Enabled")
+    private Boolean enabled = false; 
+    
     @Column(name = "RegistrationDate")
     private LocalDate registrationDate;
-    
+
     @OneToMany(mappedBy="user")
     @JsonManagedReference
     public List<Review> myReviews;
@@ -173,6 +176,14 @@ public class User {
 
 	public void setRegistrationDate(LocalDate registrationDate) {
 		this.registrationDate = registrationDate;
+	}
+
+	public Boolean isEnabled() {
+		return enabled;
+	}
+
+	public void setEnabled(Boolean enabled) {
+		this.enabled = enabled;
 	}
 
 	@Override

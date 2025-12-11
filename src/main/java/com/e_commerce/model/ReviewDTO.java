@@ -1,43 +1,53 @@
 package com.e_commerce.model;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 
 public class ReviewDTO {
-	
-	@NotNull(message = "El producto es obligatorio")
-    private Long productId;  
 
-    @NotNull(message = "La valoración es obligatoria")
-    @Min(value = 1, message = "La valoración mínima es 1")
-    @Max(value = 5, message = "La valoración máxima es 5")
+    private Long id;
+
+    // Datos del usuario
+    private Long userId;
+    private String userName;
+
+    // Datos del producto
+    private Long productId;
+    private String productName;
+
     private Integer rating;
-
-    @Size(max = 500, message = "El comentario no puede superar los 500 caracteres")
     private String comment;
-    
-    
+    private LocalDate reviewDate;
 
-    public ReviewDTO(@NotNull(message = "El producto es obligatorio") Long productId,
-			@NotNull(message = "La valoración es obligatoria") @Min(value = 1, message = "La valoración mínima es 1") @Max(value = 5, message = "La valoración máxima es 5") Integer rating,
-			@Size(max = 500, message = "El comentario no puede superar los 500 caracteres") String comment) {
-		super();
-		this.productId = productId;
-		this.rating = rating;
-		this.comment = comment;
-	}
-    
-    
-	public ReviewDTO() {
-		super();
-	}
+    // 🔹 Constructor vacío obligatorio para Jackson
+    public ReviewDTO() {}
 
+    // Constructor a partir de entidad Review
+    public ReviewDTO(Review review) {
+        this.id = review.getId();
+        this.userId = review.getUser().getId();
+        this.userName = review.getUser().getName();
+        this.productId = review.getProduct().getId();
+        this.productName = review.getProduct().getName();
+        this.rating = review.getRating();
+        this.comment = review.getComment();
+        this.reviewDate = review.getReviewDate();
+    }
 
-	// Getters y setters
+    // Getters y setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
+
     public Long getProductId() { return productId; }
     public void setProductId(Long productId) { this.productId = productId; }
+
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
 
     public Integer getRating() { return rating; }
     public void setRating(Integer rating) { this.rating = rating; }
@@ -45,4 +55,6 @@ public class ReviewDTO {
     public String getComment() { return comment; }
     public void setComment(String comment) { this.comment = comment; }
 
+    public LocalDate getReviewDate() { return reviewDate; }
+    public void setReviewDate(LocalDate reviewDate) { this.reviewDate = reviewDate; }
 }

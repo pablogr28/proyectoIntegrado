@@ -1,6 +1,7 @@
 package com.e_commerce.model;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -107,6 +108,22 @@ public class Order {
 		this.status = status;
 	}
 
+	public List<CouponUser> getCoupons() {
+		return coupons;
+	}
+
+	public void setCoupons(List<CouponUser> coupons) {
+		this.coupons = coupons;
+	}
+
+	public List<OrderDetail> getOrderDetails() {
+		return orderDetails;
+	}
+
+	public void setOrderDetails(List<OrderDetail> orderDetails) {
+		this.orderDetails = orderDetails;
+	}
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(id);
@@ -123,6 +140,8 @@ public class Order {
 		Order other = (Order) obj;
 		return Objects.equals(id, other.id);
 	}
+
+	
 	
 	
 	
