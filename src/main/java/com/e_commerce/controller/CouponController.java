@@ -8,7 +8,6 @@ import com.e_commerce.service.CouponService;
 
 @RestController
 @RequestMapping("/api/coupons")
-@CrossOrigin(origins = "http://localhost:4200")
 public class CouponController {
 
     private final CouponService couponService;
